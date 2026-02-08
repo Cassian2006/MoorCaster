@@ -1,0 +1,64 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Python cache / venv
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Runtime logs / temp
+*.log
+tmp/
+temp/
+
+# Data artifacts (keep folder placeholders only)
+data/**
+!data/**/
+!data/**/.gitkeep
+
+# Pipeline outputs (keep folder placeholders only)
+outputs/**
+!outputs/**/
+!outputs/**/.gitkeep
+
+# Model weights / large binaries
+*.pt
+*.pth
+*.onnx
+*.ckpt
+*.zip
+*.tar
+*.tif
+*.tiff
+*.dat
+
+# Keep source-controlled assets metadata/placeholders
+!assets/**/.gitignore
+!assets/**/.gitkeep
+

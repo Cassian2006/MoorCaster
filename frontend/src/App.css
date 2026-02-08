@@ -1,0 +1,249 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap");
+
+:root {
+  --bg: radial-gradient(1200px 600px at 10% -10%, #17305a 0%, #0b1428 45%, #070b16 100%);
+  --panel: #0f1d35;
+  --panel-soft: #142541;
+  --line: #254169;
+  --text: #eaf0ff;
+  --sub: #9db0d6;
+  --accent: #4ecdc4;
+  --accent2: #ff7a59;
+  --accent3: #f4b942;
+  --err: #ff6b6b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "IBM Plex Sans", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding: 16px;
+}
+
+.top-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.top-bar h1 {
+  font-family: "Space Grotesk", sans-serif;
+  margin: 0;
+  font-size: clamp(22px, 3vw, 30px);
+  letter-spacing: 0.2px;
+}
+
+.top-bar p {
+  margin: 4px 0 0;
+  color: var(--sub);
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.updated {
+  color: var(--sub);
+  font-size: 12px;
+  margin-right: 6px;
+}
+
+button,
+select {
+  background: var(--panel-soft);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+.tabs {
+  margin-top: 14px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tabs button.active {
+  background: linear-gradient(135deg, #1c335a, #143253);
+  border-color: var(--accent);
+}
+
+.panel {
+  margin-top: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.card {
+  background: linear-gradient(180deg, rgba(21, 39, 68, 0.94), rgba(13, 23, 40, 0.94));
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.card h3 {
+  margin: 0 0 10px;
+  font-family: "Space Grotesk", sans-serif;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.kpi {
+  background: rgba(8, 16, 30, 0.55);
+  border: 1px solid #23426c;
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.kpi span {
+  color: var(--sub);
+  font-size: 12px;
+}
+
+.kpi strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 20px;
+  color: #f6fbff;
+}
+
+.charts-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hint-box {
+  background: rgba(244, 185, 66, 0.13);
+  border: 1px solid rgba(244, 185, 66, 0.45);
+  border-radius: 12px;
+  padding: 10px;
+  color: #ffe6a2;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.card-list {
+  display: grid;
+  gap: 8px;
+}
+
+.ev-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #264974;
+  border-radius: 10px;
+  padding: 8px;
+  background: rgba(6, 13, 24, 0.45);
+}
+
+.job-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.progress-box {
+  margin-top: 8px;
+  color: var(--sub);
+  font-size: 13px;
+}
+
+.log-tail {
+  margin-top: 8px;
+  max-height: 180px;
+  overflow: auto;
+  border: 1px solid #284670;
+  border-radius: 8px;
+  padding: 8px;
+  background: #091428;
+  font-family: Consolas, monospace;
+  font-size: 12px;
+}
+
+.error-box {
+  margin-top: 10px;
+  border: 1px solid var(--err);
+  color: #ffd6d6;
+  background: rgba(255, 107, 107, 0.14);
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 5, 12, 0.76);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 999;
+}
+
+.modal {
+  width: min(760px, 100%);
+  background: #0b162c;
+  border: 1px solid #3b6299;
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.modal.wide {
+  width: min(1000px, 100%);
+}
+
+.modal pre {
+  max-height: 60vh;
+  overflow: auto;
+  background: #070f1e;
+  border: 1px solid #2d4c77;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 12px;
+}
+
+@media (max-width: 920px) {
+  .charts-row {
+    grid-template-columns: 1fr;
+  }
+  .top-bar {
+    flex-direction: column;
+  }
+  .top-actions {
+    justify-content: flex-start;
+  }
+}

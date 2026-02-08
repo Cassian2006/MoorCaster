@@ -1,0 +1,7 @@
+model: assets/models/yolo.pt
+conf: 0.25
+iou: 0.45
+classes:
+  - 8
+input_dir: data/interim/s1_quicklook
+output_dir: outputs/yolo
