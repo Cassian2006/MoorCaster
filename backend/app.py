@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -329,6 +330,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/")
+def root() -> RedirectResponse:
+    return RedirectResponse(url="/docs", status_code=307)
+
+
+@app.get("/favicon.ico")
+def favicon() -> Response:
+    return Response(status_code=204)
 
 
 @app.get("/api/health")
