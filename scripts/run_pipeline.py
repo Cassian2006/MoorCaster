@@ -143,6 +143,7 @@ def main() -> None:
                     str(args.horizon_days),
                     "--yolo-fill-mode",
                     "interpolate",
+                    "--allow-missing-ais",
                 ]
             )
         else:

@@ -321,7 +321,7 @@ def _find_ais_source_csv() -> Optional[Path]:
     return candidates[0] if candidates else None
 
 
-app = FastAPI(title="Yangshan Congestion API", version="0.1.0")
+app = FastAPI(title="MoorCaster API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -474,15 +474,21 @@ def _ensure_waiting_forecast(horizon: int) -> Path:
 def _ensure_vision_forecast(horizon: int) -> Path:
     out = METRICS_DIR / "vision_forecast.csv"
     yolo_src = METRICS_DIR / "yolo_observed.csv"
-    ais_src = METRICS_DIR / "congestion_curve.csv"
-    if not yolo_src.exists() or _read_csv(yolo_src).empty or not ais_src.exists() or _read_csv(ais_src).empty:
+    if not yolo_src.exists() or _read_csv(yolo_src).empty:
         return out
     need_build = True
     if out.exists():
         df = _read_csv(out)
         need_build = df.empty or len(df) < horizon
     if need_build:
-        _run_script(["scripts/run_vision_forecast.py", "--horizon", str(horizon)])
+        _run_script(
+            [
+                "scripts/run_vision_forecast.py",
+                "--horizon",
+                str(horizon),
+                "--allow-missing-ais",
+            ]
+        )
     return out
 
 

@@ -10,7 +10,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ROI = {
-    "id": "yangshan_anchor",
+    "id": "moorcaster_anchor",
     "bbox": {"lon_min": 121.90, "lon_max": 122.25, "lat_min": 30.50, "lat_max": 30.75},
 }
 
@@ -120,7 +120,7 @@ def main() -> None:
         yolo_info = _yolo_summary(yolo, day)
         card = {
             "card_id": card_id,
-            "port_id": "yangshan",
+            "port_id": "moorcaster",
             "roi_id": DEFAULT_ROI["id"],
             "roi_bbox": DEFAULT_ROI["bbox"],
             "t_anchor": t_text,
@@ -163,4 +163,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -129,12 +129,11 @@ def main() -> None:
     _run(yolo_cmd)
     _run(["scripts/build_yolo_observed.py", "--yolo-dir", args.yolo_out])
 
-    if not _has_ais_metrics():
-        print("[warn] AIS metrics not ready, skip vision forecast for now")
-        print("[done] yolo detections and yolo_observed are ready")
-        return
-
     # Prefer interpolation; fallback to ffill to avoid empty series.
+    # YOLO-only mode is allowed before AIS metrics are ready.
+    if not _has_ais_metrics():
+        print("[warn] AIS metrics not ready, using YOLO-only forecast mode")
+
     ok = _run(
         [
             "scripts/run_vision_forecast.py",
@@ -142,6 +141,7 @@ def main() -> None:
             str(args.horizon),
             "--yolo-fill-mode",
             "interpolate",
+            "--allow-missing-ais",
         ],
         allow_fail=True,
     )
@@ -153,6 +153,7 @@ def main() -> None:
                 str(args.horizon),
                 "--yolo-fill-mode",
                 "ffill",
+                "--allow-missing-ais",
             ]
         )
     print("[done] s1+yolo auto pipeline completed")

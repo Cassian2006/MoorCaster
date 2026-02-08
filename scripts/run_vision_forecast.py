@@ -95,6 +95,17 @@ def main() -> None:
         help="How to fill missing daily YOLO bins before forecasting",
     )
     parser.add_argument("--yolo-fill", type=float, default=0.0, help="Fallback value when fill requires constant")
+    parser.add_argument(
+        "--allow-missing-ais",
+        action="store_true",
+        help="Allow YOLO-only forecast when AIS inputs are unavailable",
+    )
+    parser.add_argument(
+        "--default-scale-factor",
+        type=float,
+        default=1.0,
+        help="Fallback scale factor when AIS is unavailable or unusable",
+    )
     args = parser.parse_args()
 
     yolo_path = Path(args.yolo_input)
@@ -103,8 +114,6 @@ def main() -> None:
 
     if not yolo_path.exists():
         raise FileNotFoundError(f"Missing yolo input: {yolo_path}")
-    if not ais_path.exists():
-        raise FileNotFoundError(f"Missing ais input: {ais_path}")
 
     yolo_df = pd.read_csv(yolo_path)
     if "time_bin" not in yolo_df.columns or "yolo_detections" not in yolo_df.columns:
@@ -117,12 +126,21 @@ def main() -> None:
         fill_value=args.yolo_fill,
     )
 
-    ais_df = pd.read_csv(ais_path)
-    if "time_bin" not in ais_df.columns or args.series not in ais_df.columns:
-        raise KeyError(f"ais input must contain: time_bin, {args.series}")
-    ais_daily = _resample_day(ais_df, "time_bin", args.series, fill_mode="none")
+    has_ais_series = False
+    ais_daily = pd.Series(dtype=float)
+    if ais_path.exists():
+        ais_df = pd.read_csv(ais_path)
+        if "time_bin" not in ais_df.columns or args.series not in ais_df.columns:
+            raise KeyError(f"ais input must contain: time_bin, {args.series}")
+        ais_daily = _resample_day(ais_df, "time_bin", args.series, fill_mode="none")
+        has_ais_series = not ais_daily.empty
+    elif not args.allow_missing_ais:
+        raise FileNotFoundError(f"Missing ais input: {ais_path}")
 
-    scale_factor = _calc_scale(ais_daily=ais_daily, yolo_daily=yolo_daily)
+    scale_factor = max(float(args.default_scale_factor), 0.0)
+    if has_ais_series:
+        scale_factor = _calc_scale(ais_daily=ais_daily, yolo_daily=yolo_daily)
+
     yolo_fc, freq = _forecast(
         series=yolo_daily,
         horizon=args.horizon,
@@ -140,10 +158,11 @@ def main() -> None:
         }
     )
 
-    ais_fc_df = None
+    has_ais_forecast = False
     if ais_forecast_path.exists():
         ais_fc_df = pd.read_csv(ais_forecast_path)
         if "time_bin" in ais_fc_df.columns and "forecast_value" in ais_fc_df.columns:
+            has_ais_forecast = True
             ais_fc_df["time_bin"] = pd.to_datetime(ais_fc_df["time_bin"])
             target_idx = ais_fc_df["time_bin"].dropna().drop_duplicates().sort_values()
             if not target_idx.empty:
@@ -163,9 +182,9 @@ def main() -> None:
             ais_fc_df = ais_fc_df.rename(columns={"forecast_value": "ais_forecast"})
             out = out.merge(ais_fc_df[["time_bin", "ais_forecast"]], on="time_bin", how="left")
         else:
-            out["ais_forecast"] = None
+            out["ais_forecast"] = pd.NA
     else:
-        out["ais_forecast"] = None
+        out["ais_forecast"] = pd.NA
 
     alpha = min(max(float(args.alpha), 0.0), 1.0)
     out["vision_forecast"] = out.apply(
@@ -179,6 +198,7 @@ def main() -> None:
     out["freq"] = freq
     out["scale_factor"] = scale_factor
     out["blend_alpha"] = alpha
+    out["mode"] = "blend" if has_ais_forecast else "yolo_only"
     out["time_bin"] = pd.to_datetime(out["time_bin"]).dt.strftime("%Y-%m-%d")
 
     out_path = Path(args.output)
@@ -189,4 +209,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

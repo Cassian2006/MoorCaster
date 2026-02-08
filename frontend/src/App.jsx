@@ -22,7 +22,7 @@ const ROI_CENTER = [30.625, 122.075];
 
 const I18N = {
   zh: {
-    title: "Yangshan Anchorage Console",
+    title: "MoorCaster Console",
     subtitle: "AIS primary + Sentinel-1/YOLO visual evidence",
     serverUpdated: "数据最后更新(UTC)",
     frontendUpdated: "前端构建时间(UTC)",
@@ -62,7 +62,7 @@ const I18N = {
     progress: "下载进度"
   },
   en: {
-    title: "Yangshan Anchorage Console",
+    title: "MoorCaster Console",
     subtitle: "AIS primary + Sentinel-1/YOLO visual evidence",
     serverUpdated: "Data Last Updated (UTC)",
     frontendUpdated: "Frontend Build Time (UTC)",

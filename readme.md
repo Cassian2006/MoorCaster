@@ -1,4 +1,4 @@
-# Yangshan C&W (Rebuild)
+# MoorCaster (Rebuild)
 
 本仓库用于洋山锚地 `Congestion & Waiting` 分析，当前按以下固定口径运行：
 
@@ -12,7 +12,7 @@
 ## 1) 环境准备
 
 ```powershell
-cd "C:\Users\cai yuan qi\Desktop\YangshanC&W"
+cd "C:\Users\cai yuan qi\Desktop\MoorCaster"
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
@@ -247,3 +247,32 @@ Returns:
 - `checks.models`
 - `checks.activity` (recent log activity)
 - `checks.pipeline_ready`
+
+## 14) S1 Training Pipeline (New)
+
+After S1 GRD ZIP download is done, you can build pseudo labels and fine-tune YOLO:
+
+```powershell
+python .\scripts\run_s1_training_pipeline.py `
+  --s1-grd-zip-dir data/raw/s1/grd_zip `
+  --s1-grd-png-dir data/interim/s1_grd_png `
+  --yolo-output outputs/yolo `
+  --dataset-dir data/interim/s1_yolo_pseudo `
+  --epochs 20 `
+  --imgsz 960 `
+  --batch 8 `
+  --device 0
+```
+
+What this command does:
+
+- Prepare GRD ZIP -> PNG (`prepare_s1_grd.py`)
+- Run YOLO on S1 PNG (`run_yolo.py`)
+- Build pseudo-label YOLO dataset (`build_s1_pseudo_yolo_dataset.py`)
+- Fine-tune model if labeled images >= threshold (`train_s1_yolo_finetune.py`)
+
+Main outputs:
+
+- `data/interim/s1_yolo_pseudo/data.yaml`
+- `data/interim/s1_yolo_pseudo/summary.json`
+- `assets/models/sar_ship_yolov8n_s1.pt`

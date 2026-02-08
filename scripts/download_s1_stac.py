@@ -242,6 +242,29 @@ def main() -> None:
             if needs_auth and not auth_headers:
                 skipped_no_auth += 1
             else:
+                # Token can expire during long runs; refresh before each product request.
+                if needs_auth:
+                    try:
+                        token = _get_cdse_token(args.copernicus_user, args.copernicus_password)
+                        auth_headers = {"Authorization": f"Bearer {token}"}
+                    except Exception as ex:
+                        err = f"token_refresh_failed: {ex}"
+                        print(f"[error] {fid}: {err}")
+                        rows.append(
+                            {
+                                "id": fid,
+                                "datetime": dt,
+                                "asset_kind": args.asset,
+                                "sat:orbit_state": props.get("sat:orbit_state"),
+                                "sar:instrument_mode": props.get("sar:instrument_mode"),
+                                "sar:product_type": props.get("sar:product_type"),
+                                "asset_href": asset,
+                                "local_file": None,
+                                "downloaded_now": False,
+                                "error": err,
+                            }
+                        )
+                        continue
                 ext = _asset_ext(args.asset, asset)
                 out = ROOT / args.download_dir / f"{fid}{ext}"
                 local_file = str(out)
@@ -252,6 +275,18 @@ def main() -> None:
                         dl_count += 1
                 except Exception as ex:
                     err = str(ex)
+                    # One-shot recovery for expired token in mid-run.
+                    if needs_auth and "401" in err:
+                        try:
+                            token = _get_cdse_token(args.copernicus_user, args.copernicus_password)
+                            auth_headers = {"Authorization": f"Bearer {token}"}
+                            print(f"[retry-auth] {fid} refreshed token, retry once")
+                            downloaded = _download(asset, out, headers=auth_headers, resume=args.resume)
+                            if downloaded:
+                                dl_count += 1
+                                err = None
+                        except Exception as ex2:
+                            err = f"{err} | retry_auth_failed: {ex2}"
                     print(f"[error] {fid}: {err}")
 
         rows.append(

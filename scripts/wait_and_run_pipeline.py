@@ -28,7 +28,7 @@ def _count_files(folder: Path, exts: set[str]) -> int:
 def _is_ais_download_running() -> bool:
     cmd = (
         "Get-CimInstance Win32_Process | "
-        "Where-Object { $_.CommandLine -like '*download_ais_pipeline.py*' -or $_.CommandLine -like '*download_ais_complete.py*' } | "
+        "Where-Object { $_.Name -eq 'python.exe' -and ($_.CommandLine -like '*download_ais_pipeline.py*' -or $_.CommandLine -like '*download_ais_complete.py*') } | "
         "Measure-Object | Select-Object -ExpandProperty Count"
     )
     p = subprocess.run(["powershell", "-NoProfile", "-Command", cmd], capture_output=True, text=True, cwd=str(ROOT))

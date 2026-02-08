@@ -84,7 +84,7 @@ def _html(points: List[dict]) -> str:
       weight: 2,
       fillOpacity: 0.06
     }}).addTo(map);
-    roi.bindTooltip('Yangshan ROI');
+    roi.bindTooltip('MoorCaster ROI');
 
     points.forEach(p => {{
       const lat = Number(p.lat);
@@ -125,4 +125,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

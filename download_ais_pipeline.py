@@ -25,13 +25,32 @@ def _scan_progress(out_dir: Path) -> tuple[int, str, str]:
         base = out_dir / sub
         if not base.exists():
             continue
-        files.extend([p for p in base.rglob("*") if p.is_file()])
+        for p in base.rglob("*"):
+            if not p.is_file():
+                continue
+            # Ignore in-flight temp files; they may be moved/removed during scan.
+            if p.suffix.lower() == ".tmp":
+                continue
+            # Only count final slice artifacts.
+            if p.suffix.lower() not in {".csv", ".jsonl"}:
+                continue
+            files.append(p)
     if not files:
         return 0, "", ""
-    files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-    latest = files[0]
-    latest_time = datetime.fromtimestamp(latest.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
-    return len(files), str(latest), latest_time
+
+    stamped: List[tuple[float, Path]] = []
+    for p in files:
+        try:
+            stamped.append((p.stat().st_mtime, p))
+        except FileNotFoundError:
+            # File may be atomically replaced while scanning.
+            continue
+    if not stamped:
+        return 0, "", ""
+    stamped.sort(key=lambda x: x[0], reverse=True)
+    latest_mtime, latest = stamped[0]
+    latest_time = datetime.fromtimestamp(latest_mtime).strftime("%Y-%m-%d %H:%M:%S")
+    return len(stamped), str(latest), latest_time
 
 
 def _enqueue_stdout(pipe, q: Queue[str]) -> None:
