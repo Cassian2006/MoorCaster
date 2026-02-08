@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +22,7 @@ LOG_DIR = ROOT / "outputs" / "logs"
 RAW_AIS_DIR = ROOT / "data" / "raw" / "ais"
 PROCESSED_AIS_DIR = ROOT / "data" / "processed" / "ais_cleaned"
 INTERIM_AIS_DIR = ROOT / "data" / "interim" / "ais_clean"
+FRONTEND_DIST_DIR = ROOT / "frontend" / "dist"
 
 DEFAULT_BBOX = "121.90,30.75,122.25,30.50"
 DEFAULT_START = "2024-04-01 00:00:00"
@@ -322,6 +323,23 @@ def _find_ais_source_csv() -> Optional[Path]:
     return candidates[0] if candidates else None
 
 
+def _frontend_index() -> Path:
+    return FRONTEND_DIST_DIR / "index.html"
+
+
+def _frontend_file_or_none(rel_path: str) -> Optional[Path]:
+    if not rel_path:
+        return None
+    # Block path traversal and only allow files under dist/.
+    target = (FRONTEND_DIST_DIR / rel_path).resolve()
+    dist_root = FRONTEND_DIST_DIR.resolve()
+    if dist_root not in target.parents and target != dist_root:
+        return None
+    if target.exists() and target.is_file():
+        return target
+    return None
+
+
 app = FastAPI(title="MoorCaster API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
@@ -333,12 +351,18 @@ app.add_middleware(
 
 
 @app.get("/")
-def root() -> RedirectResponse:
+def root() -> Response:
+    index = _frontend_index()
+    if index.exists():
+        return FileResponse(index)
     return RedirectResponse(url="/docs", status_code=307)
 
 
 @app.get("/favicon.ico")
 def favicon() -> Response:
+    ico = _frontend_file_or_none("favicon.ico")
+    if ico:
+        return FileResponse(ico)
     return Response(status_code=204)
 
 
@@ -687,3 +711,20 @@ def jobs_status() -> Dict[str, Any]:
         "jobs": jobs,
         "download_progress": _scan_latest_ais_file(),
     }
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def spa_fallback(full_path: str) -> Response:
+    # Keep API/docs/openapi routes as backend-only.
+    if full_path.startswith("api/") or full_path in {"api", "docs", "openapi.json", "redoc"}:
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    asset = _frontend_file_or_none(full_path)
+    if asset:
+        return FileResponse(asset)
+
+    index = _frontend_index()
+    if index.exists():
+        return FileResponse(index)
+
+    raise HTTPException(status_code=404, detail="Frontend build not found; deploy frontend/dist or open /docs")
