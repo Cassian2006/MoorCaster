@@ -65,3 +65,46 @@ def test_health_degraded_without_credentials(tmp_path: Path, monkeypatch) -> Non
     assert body["ok"] is False
     assert body["status"] == "degraded"
     assert any("credentials" in w.lower() for w in body["warnings"])
+
+
+def test_map_ais_points_ignores_non_geo_csv(tmp_path: Path, monkeypatch) -> None:
+    _patch_paths(tmp_path, monkeypatch)
+    # Non-geo CSV should not be selected as map source.
+    (api.RAW_AIS_DIR / "mmsi.csv").write_text("mmsi,count\n1,10\n", encoding="utf-8")
+    # Real track CSV under raw_tracks_csv should be used.
+    sub = api.RAW_AIS_DIR / "raw_tracks_csv" / "100"
+    sub.mkdir(parents=True, exist_ok=True)
+    (sub / "slice.csv").write_text(
+        "mmsi,postime,lat,lon,sog\n100,2024-04-01 00:00:00,30.60,122.00,0.2\n",
+        encoding="utf-8",
+    )
+
+    client = TestClient(api.app)
+    res = client.get("/api/map/ais-points?limit=100")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["source"].endswith("data\\raw\\ais\\raw_tracks_csv\\100\\slice.csv")
+    assert len(body["features"]) == 1
+
+
+def test_forecast_vision_returns_semantic_unit_and_confidence(tmp_path: Path, monkeypatch) -> None:
+    _patch_paths(tmp_path, monkeypatch)
+    vf = api.METRICS_DIR / "vision_forecast.csv"
+    vf.write_text(
+        "\n".join(
+            [
+                "time_bin,vision_forecast,yolo_ship_eq_forecast,mode,semantic_unit,confidence_level,confidence_reason",
+                "2024-07-01,20,20,yolo_only,detection_index,low,YOLO-only forecast without AIS calibration.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    client = TestClient(api.app)
+    res = client.get("/api/forecast/vision?horizon_days=3")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["unit"] == "detection_index"
+    assert body["confidence"]["level"] == "low"
+    assert "trend signals" in body["business_note"]
+    assert len(body["items"]) == 1

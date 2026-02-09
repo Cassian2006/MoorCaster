@@ -339,13 +339,26 @@ def _scan_latest_ais_file() -> Dict[str, Any]:
     }
 
 
+def _csv_has_geo_columns(path: Path) -> bool:
+    try:
+        sample = pd.read_csv(path, nrows=1)
+    except Exception:
+        return False
+    return "lon" in sample.columns and "lat" in sample.columns
+
+
 def _find_ais_source_csv() -> Optional[Path]:
-    candidates = [
-        *sorted(PROCESSED_AIS_DIR.glob("*.csv")),
-        *sorted(INTERIM_AIS_DIR.glob("*.csv")),
-        *sorted((RAW_AIS_DIR).glob("*.csv")),
+    groups = [
+        sorted(PROCESSED_AIS_DIR.rglob("*.csv")),
+        sorted(INTERIM_AIS_DIR.rglob("*.csv")),
+        sorted((RAW_AIS_DIR / "raw_tracks_csv").rglob("*.csv")),
+        sorted(RAW_AIS_DIR.glob("*.csv")),
     ]
-    return candidates[0] if candidates else None
+    for candidates in groups:
+        for p in candidates:
+            if _csv_has_geo_columns(p):
+                return p
+    return None
 
 
 def _frontend_index() -> Path:
@@ -634,7 +647,24 @@ def forecast_vision(horizon_days: int = 24, date: Optional[str] = None) -> Dict[
         hit = next((x for x in items if str(x.get("time_bin")) == date), None)
         if hit:
             selected = hit
-    return {"items": items, "selected": selected, "unit": "vessels"}
+    unit = "vessels"
+    if "semantic_unit" in df.columns and not df["semantic_unit"].dropna().empty:
+        unit = str(df["semantic_unit"].dropna().iloc[0])
+    confidence = {
+        "level": "unknown",
+        "reason": "Not provided",
+    }
+    if "confidence_level" in df.columns and not df["confidence_level"].dropna().empty:
+        confidence["level"] = str(df["confidence_level"].dropna().iloc[0])
+    if "confidence_reason" in df.columns and not df["confidence_reason"].dropna().empty:
+        confidence["reason"] = str(df["confidence_reason"].dropna().iloc[0])
+    return {
+        "items": items,
+        "selected": selected,
+        "unit": unit,
+        "confidence": confidence,
+        "business_note": "Use vessels for decisioning; index-like outputs are trend signals only.",
+    }
 
 
 @app.get("/api/evidence/cards")

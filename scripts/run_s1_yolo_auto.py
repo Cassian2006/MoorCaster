@@ -26,6 +26,18 @@ def _has_images(folder: Path) -> bool:
     return any(p.is_file() and p.suffix.lower() in exts for p in folder.rglob("*"))
 
 
+def _reset_json_outputs(folder: Path) -> int:
+    if not folder.exists():
+        folder.mkdir(parents=True, exist_ok=True)
+        return 0
+    removed = 0
+    for p in folder.rglob("*.json"):
+        if p.is_file():
+            p.unlink(missing_ok=True)
+            removed += 1
+    return removed
+
+
 def _has_ais_metrics() -> bool:
     return (ROOT / "outputs" / "metrics" / "congestion_curve.csv").exists()
 
@@ -53,6 +65,7 @@ def main() -> None:
     parser.add_argument("--model", default="")
     parser.add_argument("--horizon", type=int, default=24)
     parser.add_argument("--classes", default="")
+    parser.add_argument("--keep-yolo-history", action="store_true")
     args = parser.parse_args()
 
     s1_dir = ROOT / args.s1_dir
@@ -115,6 +128,10 @@ def main() -> None:
     print(f"[info] YOLO input dir: {yolo_input_dir}")
 
     model_to_use = args.model.strip() or _preferred_model()
+    if not args.keep_yolo_history:
+        removed = _reset_json_outputs(ROOT / args.yolo_out)
+        if removed:
+            print(f"[info] cleared old YOLO json outputs: {removed}")
 
     yolo_cmd = [
         "scripts/run_yolo.py",

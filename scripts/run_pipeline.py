@@ -17,8 +17,11 @@ def _run(cmd: list[str]) -> None:
         raise RuntimeError(f"command failed: {' '.join(cmd)}")
 
 
-def _exists_any(folder: Path, suffix: str = ".csv") -> bool:
-    return folder.exists() and any(folder.glob(f"*{suffix}"))
+def _exists_any(folder: Path, suffix: str = ".csv", recursive: bool = False) -> bool:
+    if not folder.exists():
+        return False
+    it = folder.rglob(f"*{suffix}") if recursive else folder.glob(f"*{suffix}")
+    return any(it)
 
 
 def _has_images(folder: Path) -> bool:
@@ -36,6 +39,19 @@ def _is_model_usable(model_arg: str) -> bool:
     if "/" not in model_arg and "\\" not in model_arg and model_arg.lower().endswith(".pt"):
         return True
     return False
+
+
+def _reset_json_outputs(folder: Path) -> int:
+    if not folder.exists():
+        folder.mkdir(parents=True, exist_ok=True)
+        return 0
+    removed = 0
+    for p in folder.rglob("*.json"):
+        if not p.is_file():
+            continue
+        p.unlink(missing_ok=True)
+        removed += 1
+    return removed
 
 
 def _preferred_model() -> str:
@@ -65,27 +81,29 @@ def main() -> None:
     parser.add_argument("--yolo-input", default="data/interim/s1_quicklook")
     parser.add_argument("--yolo-grd-input", default="data/interim/s1_grd_png")
     parser.add_argument("--yolo-output", default="outputs/yolo")
+    parser.add_argument("--keep-yolo-history", action="store_true")
     args = parser.parse_args()
 
     raw_ais = ROOT / "data" / "raw" / "ais"
+    raw_ais_tracks_csv = raw_ais / "raw_tracks_csv"
     interim_ais = ROOT / "data" / "interim" / "ais_clean"
     processed_ais = ROOT / "data" / "processed" / "ais_cleaned"
     metrics_dir = ROOT / "outputs" / "metrics"
     metrics_dir.mkdir(parents=True, exist_ok=True)
 
     if not args.skip_clip:
-        if _exists_any(raw_ais):
+        if _exists_any(raw_ais_tracks_csv, recursive=True):
             _run(["src/data/clip_ais.py"])
         else:
-            print("[warn] skip clip_ais: no raw csv found in data/raw/ais")
+            print("[warn] skip clip_ais: no raw track csv found in data/raw/ais/raw_tracks_csv")
 
     if not args.skip_clean:
-        if _exists_any(interim_ais):
+        if _exists_any(interim_ais, recursive=True):
             _run(["src/data/ais_clean_basic.py"])
         else:
             print("[warn] skip clean_ais: no clipped csv found in data/interim/ais_clean")
 
-    if _exists_any(processed_ais):
+    if _exists_any(processed_ais, recursive=True):
         _run(
             [
                 "scripts/run_metrics.py",
@@ -132,6 +150,10 @@ def main() -> None:
             yolo_input = yolo_grd_input
         model_to_use = args.yolo_model.strip() or _preferred_model()
         if _has_images(yolo_input) and _is_model_usable(model_to_use):
+            if not args.keep_yolo_history:
+                removed = _reset_json_outputs(ROOT / args.yolo_output)
+                if removed:
+                    print(f"[info] cleared old YOLO json outputs: {removed}")
             _run(
                 [
                     "scripts/run_yolo.py",

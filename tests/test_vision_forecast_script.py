@@ -45,10 +45,26 @@ def test_run_vision_forecast_yolo_only(tmp_path: Path) -> None:
 
     out = pd.read_csv(out_csv)
     assert len(out) == 5
-    assert set(["vision_forecast", "yolo_ship_eq_forecast", "mode", "scale_factor"]).issubset(out.columns)
+    assert set(
+        [
+            "vision_forecast",
+            "yolo_ship_eq_forecast",
+            "mode",
+            "scale_factor",
+            "semantic_unit",
+            "confidence_level",
+            "confidence_reason",
+            "scale_source",
+            "scale_aligned_days",
+        ]
+    ).issubset(out.columns)
     assert out["mode"].nunique() == 1
     assert out["mode"].iloc[0] == "yolo_only"
     assert float(out["scale_factor"].iloc[0]) == 1.0
+    assert out["semantic_unit"].iloc[0] == "detection_index"
+    assert out["confidence_level"].iloc[0] == "low"
+    assert out["scale_source"].iloc[0] == "default"
+    assert int(out["scale_aligned_days"].iloc[0]) == 0
 
     vf = pd.to_numeric(out["vision_forecast"], errors="coerce")
     yf = pd.to_numeric(out["yolo_ship_eq_forecast"], errors="coerce")

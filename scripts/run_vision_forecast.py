@@ -64,16 +64,16 @@ def _forecast(series: pd.Series, horizon: int, method: str, ma_window: int, seas
     return pd.Series(vals.values, index=future_index), freq
 
 
-def _calc_scale(ais_daily: pd.Series, yolo_daily: pd.Series) -> float:
+def _calc_scale(ais_daily: pd.Series, yolo_daily: pd.Series) -> tuple[float, int]:
     joined = pd.concat([ais_daily.rename("ais"), yolo_daily.rename("yolo")], axis=1).dropna()
     joined = joined[joined["yolo"] > 0]
     if joined.empty:
-        return 1.0
+        return 1.0, 0
     ratios = joined["ais"] / joined["yolo"]
     scale = float(ratios.median())
     if scale <= 0:
-        return 1.0
-    return scale
+        return 1.0, int(len(joined))
+    return scale, int(len(joined))
 
 
 def main() -> None:
@@ -106,6 +106,12 @@ def main() -> None:
         default=1.0,
         help="Fallback scale factor when AIS is unavailable or unusable",
     )
+    parser.add_argument(
+        "--min-observed-points-for-seasonal",
+        type=int,
+        default=21,
+        help="When AIS is missing and observed YOLO points are fewer than this, avoid seasonal methods.",
+    )
     args = parser.parse_args()
 
     yolo_path = Path(args.yolo_input)
@@ -118,6 +124,7 @@ def main() -> None:
     yolo_df = pd.read_csv(yolo_path)
     if "time_bin" not in yolo_df.columns or "yolo_detections" not in yolo_df.columns:
         raise KeyError("yolo input must contain: time_bin, yolo_detections")
+    yolo_observed_points = int(len(yolo_df))
     yolo_daily = _resample_day(
         yolo_df,
         "time_bin",
@@ -138,13 +145,25 @@ def main() -> None:
         raise FileNotFoundError(f"Missing ais input: {ais_path}")
 
     scale_factor = max(float(args.default_scale_factor), 0.0)
+    scale_source = "default"
+    scale_aligned_days = 0
     if has_ais_series:
-        scale_factor = _calc_scale(ais_daily=ais_daily, yolo_daily=yolo_daily)
+        scale_factor, scale_aligned_days = _calc_scale(ais_daily=ais_daily, yolo_daily=yolo_daily)
+        if scale_aligned_days > 0:
+            scale_source = "ais_median_ratio"
+
+    method_used = args.method
+    if (
+        not has_ais_series
+        and method_used in {"seasonal", "seasonal_ma"}
+        and yolo_observed_points < max(1, int(args.min_observed_points_for_seasonal))
+    ):
+        method_used = "ma"
 
     yolo_fc, freq = _forecast(
         series=yolo_daily,
         horizon=args.horizon,
-        method=args.method,
+        method=method_used,
         ma_window=args.ma_window,
         seasonal_period=args.seasonal_period,
     )
@@ -193,12 +212,32 @@ def main() -> None:
         else float(alpha * r["ais_forecast"] + (1.0 - alpha) * r["yolo_ship_eq_forecast"]),
         axis=1,
     )
+    has_ais_blend = has_ais_forecast
+    has_ais_calibration = scale_source == "ais_median_ratio"
+    if has_ais_blend:
+        semantic_unit = "vessels"
+        confidence_level = "high" if yolo_observed_points >= 21 else "medium"
+        confidence_reason = "Blended with AIS forecast."
+    elif has_ais_calibration:
+        semantic_unit = "vessel_equivalent_index"
+        confidence_level = "medium"
+        confidence_reason = "YOLO-only forecast calibrated by historical AIS ratio."
+    else:
+        semantic_unit = "detection_index"
+        confidence_level = "low"
+        confidence_reason = "YOLO-only forecast without AIS calibration."
     out["series"] = args.series
-    out["method"] = args.method
+    out["method"] = method_used
     out["freq"] = freq
     out["scale_factor"] = scale_factor
+    out["scale_source"] = scale_source
+    out["scale_aligned_days"] = scale_aligned_days
     out["blend_alpha"] = alpha
     out["mode"] = "blend" if has_ais_forecast else "yolo_only"
+    out["observed_points"] = yolo_observed_points
+    out["semantic_unit"] = semantic_unit
+    out["confidence_level"] = confidence_level
+    out["confidence_reason"] = confidence_reason
     out["time_bin"] = pd.to_datetime(out["time_bin"]).dt.strftime("%Y-%m-%d")
 
     out_path = Path(args.output)

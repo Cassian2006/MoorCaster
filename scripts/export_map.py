@@ -11,15 +11,25 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _csv_has_geo_columns(path: Path) -> bool:
+    try:
+        sample = pd.read_csv(path, nrows=1)
+    except Exception:
+        return False
+    return "lon" in sample.columns and "lat" in sample.columns
+
+
 def _pick_source() -> Path | None:
-    for folder in (
-        ROOT / "data" / "processed" / "ais_cleaned",
-        ROOT / "data" / "interim" / "ais_clean",
-        ROOT / "data" / "raw" / "ais",
-    ):
-        files = sorted(folder.glob("*.csv"))
-        if files:
-            return files[0]
+    groups = (
+        sorted((ROOT / "data" / "processed" / "ais_cleaned").rglob("*.csv")),
+        sorted((ROOT / "data" / "interim" / "ais_clean").rglob("*.csv")),
+        sorted((ROOT / "data" / "raw" / "ais" / "raw_tracks_csv").rglob("*.csv")),
+        sorted((ROOT / "data" / "raw" / "ais").glob("*.csv")),
+    )
+    for files in groups:
+        for p in files:
+            if _csv_has_geo_columns(p):
+                return p
     return None
 
 
