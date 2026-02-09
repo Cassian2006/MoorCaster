@@ -271,8 +271,98 @@ What this command does:
 - Build pseudo-label YOLO dataset (`build_s1_pseudo_yolo_dataset.py`)
 - Fine-tune model if labeled images >= threshold (`train_s1_yolo_finetune.py`)
 
+## 15) Current Default Model (Prediction)
+
+Current preferred YOLO weights order is:
+
+1. `assets/models/moorcaster_ship_lssdd_recall_r1.pt`
+2. `assets/models/moorcaster_ship_lssdd.pt`
+3. `assets/models/sar_ship_yolov8n.pt`
+4. `yolov8n.pt`
+
+So once `moorcaster_ship_lssdd_recall_r1.pt` exists, pipeline forecast will use it by default.
+
+## 16) User-Side Forecast Pipeline (No Download)
+
+Web job button (`Refresh Forecast`) triggers local processing using existing downloaded data only:
+
+- Read local AIS/S1 data
+- Run YOLO inference with active model
+- Rebuild `yolo_observed.csv`
+- Recompute `vision_forecast.csv`
+- Rebuild evidence cards and map export
+
+Backend endpoint:
+
+```text
+POST /api/jobs/pipeline/start
+```
+
+Optional request body:
+
+```json
+{
+  "horizon_days": 24,
+  "yolo_model": "assets/models/moorcaster_ship_lssdd_recall_r1.pt"
+}
+```
+
 Main outputs:
 
 - `data/interim/s1_yolo_pseudo/data.yaml`
 - `data/interim/s1_yolo_pseudo/summary.json`
 - `assets/models/sar_ship_yolov8n_s1.pt`
+
+## 12) YOLO Ship Labeling (Quick Start)
+
+1) Prepare images to label (from S1 GRD PNG):
+
+```powershell
+python .\scripts\prepare_yolo_labeling.py --input-dir data\interim\s1_grd_png --output-dir data\annotations\ship\images_all --limit 0
+```
+
+2) Install label tool (one-time):
+
+```powershell
+pip install labelImg
+```
+
+3) Launch labelImg, set format to YOLO, then:
+- Open Dir: `data\annotations\ship\images_all`
+- Change Save Dir: `data\annotations\ship\labels_all`
+- Create class: `ship`
+- Draw boxes around ships and save
+
+4) Split dataset into train/val:
+
+```powershell
+python .\scripts\split_yolo_dataset.py --images-dir data\annotations\ship\images_all --labels-dir data\annotations\ship\labels_all --out-dir data\annotations\ship --val-ratio 0.2
+```
+
+5) Training (optional, requires Ultralytics):
+
+```powershell
+pip install ultralytics
+
+yolo detect train data=configs\yolo\ship.yaml model=yolov8n.pt epochs=30 imgsz=1024 batch=8
+```
+
+### LabelMe (recommended if labelImg crashes)
+
+Start labelme:
+
+```powershell
+labelme
+```
+
+In labelme:
+- Open Dir: `data\annotations\ship\images_all`
+- Save Dir: `data\annotations\ship\labelme`
+- Label name: `ship`
+- Shape: rectangle (or polygon, we will convert to bbox)
+
+Convert LabelMe JSON to YOLO txt:
+
+```powershell
+python .\scripts\labelme_to_yolo.py --input-dir data\annotations\ship\labelme --output-dir data\annotations\ship\labels_all --label ship
+```

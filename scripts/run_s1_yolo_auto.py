@@ -30,6 +30,18 @@ def _has_ais_metrics() -> bool:
     return (ROOT / "outputs" / "metrics" / "congestion_curve.csv").exists()
 
 
+def _preferred_model() -> str:
+    candidates = [
+        ROOT / "assets" / "models" / "moorcaster_ship_lssdd_recall_r1.pt",
+        ROOT / "assets" / "models" / "moorcaster_ship_lssdd.pt",
+        ROOT / "assets" / "models" / "sar_ship_yolov8n.pt",
+    ]
+    for p in candidates:
+        if p.exists():
+            return str(p)
+    return "yolov8n.pt"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Auto pipeline for S1 quicklook + YOLO + vision forecast")
     parser.add_argument("--s1-dir", default="data/raw/s1")
@@ -102,11 +114,7 @@ def main() -> None:
         return
     print(f"[info] YOLO input dir: {yolo_input_dir}")
 
-    # Prefer SAR-specific tuned model if available.
-    model_to_use = args.model.strip() or "yolov8n.pt"
-    sar_model = ROOT / "assets" / "models" / "sar_ship_yolov8n.pt"
-    if not args.model.strip() and sar_model.exists():
-        model_to_use = str(sar_model)
+    model_to_use = args.model.strip() or _preferred_model()
 
     yolo_cmd = [
         "scripts/run_yolo.py",

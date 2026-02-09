@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import {
   Line,
   LineChart,
@@ -22,8 +22,8 @@ const ROI_CENTER = [30.625, 122.075];
 
 const I18N = {
   zh: {
-    title: "MoorCaster Console",
-    subtitle: "AIS primary + Sentinel-1/YOLO visual evidence",
+    title: "MoorCaster 控制台",
+    subtitle: "AIS 主体 + Sentinel-1/YOLO 视觉证据",
     serverUpdated: "数据最后更新(UTC)",
     frontendUpdated: "前端构建时间(UTC)",
     refresh: "刷新",
@@ -42,7 +42,7 @@ const I18N = {
     congestionTrend: "拥堵日曲线",
     waitingTrend: "等待时长日曲线",
     selectDate: "选择预测日期(未来24天任意一天)",
-    aisForecast: "AIS拥堵预测",
+    aisForecast: "AIS 拥堵预测",
     visionForecast: "视觉融合预测",
     waitingForecast: "等待时长预测",
     p90Explain: "P90: 90% 的等待事件低于该值。",
@@ -55,11 +55,11 @@ const I18N = {
     crossDayHint: "出现跨日等待(>=24h)。在高拥堵锚地场景中，这种现象可能是正常的排队等待。",
     noData: "暂无数据",
     open: "查看",
-    startDownload: "启动AIS下载",
-    startPipeline: "启动全流程",
+    ingestHint: "Web 端不会下载数据；这里只会基于已落盘的 AIS/S1 数据刷新预测与可视化。",
+    startPipeline: "刷新预测",
     running: "运行中",
     stopped: "已停止",
-    progress: "下载进度"
+    progress: "同步状态"
   },
   en: {
     title: "MoorCaster Console",
@@ -95,14 +95,13 @@ const I18N = {
     crossDayHint: "Cross-day waiting detected (>=24h). This can be normal in anchorage queues during heavy congestion.",
     noData: "No data",
     open: "Open",
-    startDownload: "Start AIS Download",
-    startPipeline: "Start Full Pipeline",
+    ingestHint: "The web app does not download data; it only refreshes forecasts from already downloaded AIS/S1 data.",
+    startPipeline: "Refresh Forecast",
     running: "Running",
     stopped: "Stopped",
-    progress: "Download Progress"
+    progress: "Ingestion Status"
   }
 };
-
 async function fetchJson(path, options) {
   const res = await fetch(`${API_BASE}${path}`, options);
   if (!res.ok) {
@@ -272,19 +271,6 @@ export default function App() {
     return Array.from(map.values()).sort((a, b) => String(a.date).localeCompare(String(b.date)));
   }, [fcCongestion, fcVision, fcWaiting]);
 
-  const startDownload = async () => {
-    try {
-      await fetchJson("/api/jobs/download-ais/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}"
-      });
-      await refreshJobStatus();
-    } catch (e) {
-      setError(String(e.message || e));
-    }
-  };
-
   const startPipeline = async () => {
     try {
       await fetchJson("/api/jobs/pipeline/start", {
@@ -322,7 +308,7 @@ export default function App() {
               className="rounded-md border border-border bg-accent px-3 py-2 text-sm hover:bg-muted"
               onClick={() => setLang((x) => (x === "zh" ? "en" : "zh"))}
             >
-              {lang === "zh" ? "EN" : "中文"}
+              {lang === "zh" ? "EN" : "涓枃"}
             </button>
           </div>
         </div>
@@ -517,10 +503,10 @@ export default function App() {
         {tab === "jobs" && (
           <section className="space-y-4">
             <div className="rounded-xl border border-border bg-card p-4">
+              <div className="mb-3 rounded-md border border-border bg-accent px-3 py-2 text-sm text-muted-foreground">
+                {t.ingestHint}
+              </div>
               <div className="mb-3 flex flex-wrap gap-2">
-                <button className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground hover:bg-primary/90" onClick={startDownload}>
-                  {t.startDownload}
-                </button>
                 <button className="rounded-md bg-secondary px-3 py-2 text-sm text-secondary-foreground hover:bg-secondary/90" onClick={startPipeline}>
                   {t.startPipeline}
                 </button>
@@ -531,6 +517,9 @@ export default function App() {
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Database className="size-4" />
                 {t.progress}: files={downloadProgress?.count || 0}, latest={downloadProgress?.latest || "-"}, mtime={downloadProgress?.latest_mtime || "-"}
+              </div>
+              <div className="mt-2 text-xs text-muted-foreground">
+                active model: {meta?.active_yolo_model || "-"}
               </div>
             </div>
 

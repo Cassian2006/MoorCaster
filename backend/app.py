@@ -29,6 +29,30 @@ DEFAULT_START = "2024-04-01 00:00:00"
 DEFAULT_END = "2024-06-30 23:59:59"
 
 
+def _preferred_yolo_models() -> List[Path]:
+    return [
+        ROOT / "assets" / "models" / "moorcaster_ship_lssdd_recall_r1.pt",
+        ROOT / "assets" / "models" / "moorcaster_ship_lssdd.pt",
+        ROOT / "assets" / "models" / "sar_ship_yolov8n.pt",
+        ROOT / "yolov8n.pt",
+    ]
+
+
+def _resolve_yolo_model(explicit: str = "") -> str:
+    if explicit.strip():
+        p = Path(explicit.strip())
+        if p.exists():
+            return str(p.resolve())
+        p2 = ROOT / explicit.strip()
+        if p2.exists():
+            return str(p2.resolve())
+        return explicit.strip()
+    for p in _preferred_yolo_models():
+        if p.exists():
+            return str(p.resolve())
+    return "yolov8n.pt"
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -139,8 +163,8 @@ def _health_checks() -> Dict[str, Any]:
     s1_quicklook_count = _count_files(ROOT / "data" / "raw" / "s1" / "quicklook")
     s1_grd_zip_count = _count_files(ROOT / "data" / "raw" / "s1" / "grd_zip", "*.zip")
     s1_grd_png_count = _count_files(ROOT / "data" / "interim" / "s1_grd_png", "*.png")
-    yolo_model = ROOT / "assets" / "models" / "sar_ship_yolov8n.pt"
-    fallback_yolo_model = ROOT / "yolov8n.pt"
+    model_candidates = _preferred_yolo_models()
+    active_model = _resolve_yolo_model("")
 
     dir_checks = {
         "outputs_metrics": {
@@ -192,8 +216,8 @@ def _health_checks() -> Dict[str, Any]:
             "metrics": metrics_state,
         },
         "models": {
-            "sar_yolo_model": {"path": str(yolo_model), "exists": yolo_model.exists()},
-            "fallback_yolo_model": {"path": str(fallback_yolo_model), "exists": fallback_yolo_model.exists()},
+            "active_model": active_model,
+            "candidates": [{"path": str(p), "exists": p.exists()} for p in model_candidates],
         },
         "activity": activity,
         "jobs": internal_jobs,
@@ -203,7 +227,7 @@ def _health_checks() -> Dict[str, Any]:
             "has_cleaned_ais": _count_files(PROCESSED_AIS_DIR, "*.csv") > 0,
             "has_metrics_base": (METRICS_DIR / "congestion_curve.csv").exists(),
             "has_yolo_input": s1_grd_png_count > 0 or s1_quicklook_count > 0,
-            "has_yolo_model": yolo_model.exists() or fallback_yolo_model.exists(),
+            "has_yolo_model": any(p.exists() for p in model_candidates),
         },
     }
 
@@ -233,6 +257,7 @@ class StartDownloadRequest(BaseModel):
 
 class StartPipelineRequest(BaseModel):
     horizon_days: int = Field(default=24, ge=1, le=24)
+    yolo_model: str = Field(default="")
 
 
 class JobState(BaseModel):
@@ -391,6 +416,7 @@ def meta() -> Dict[str, Any]:
         "last_updated_utc": latest,
         "files": file_state,
         "ais_download": _scan_latest_ais_file(),
+        "active_yolo_model": _resolve_yolo_model(""),
     }
 
 
@@ -690,14 +716,17 @@ def start_download_ais(req: StartDownloadRequest) -> Dict[str, Any]:
 
 @app.post("/api/jobs/pipeline/start")
 def start_pipeline(req: StartPipelineRequest) -> Dict[str, Any]:
+    yolo_model = _resolve_yolo_model(req.yolo_model)
     cmd = [
         sys.executable,
         "scripts/run_pipeline.py",
         "--horizon-days",
         str(req.horizon_days),
+        "--yolo-model",
+        yolo_model,
     ]
     state = _start_job("pipeline", cmd, LOG_DIR / "pipeline.log")
-    return {"job": state.model_dump()}
+    return {"job": state.model_dump(), "active_yolo_model": yolo_model}
 
 
 @app.get("/api/jobs/status")

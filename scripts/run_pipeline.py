@@ -38,6 +38,18 @@ def _is_model_usable(model_arg: str) -> bool:
     return False
 
 
+def _preferred_model() -> str:
+    candidates = [
+        ROOT / "assets" / "models" / "moorcaster_ship_lssdd_recall_r1.pt",
+        ROOT / "assets" / "models" / "moorcaster_ship_lssdd.pt",
+        ROOT / "assets" / "models" / "sar_ship_yolov8n.pt",
+    ]
+    for p in candidates:
+        if p.exists():
+            return str(p)
+    return "yolov8n.pt"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="End-to-end local pipeline runner")
     parser.add_argument("--horizon-days", type=int, default=24)
@@ -118,10 +130,7 @@ def main() -> None:
         yolo_grd_input = ROOT / args.yolo_grd_input
         if _has_images(yolo_grd_input):
             yolo_input = yolo_grd_input
-        model_to_use = args.yolo_model.strip()
-        sar_model = ROOT / "assets" / "models" / "sar_ship_yolov8n.pt"
-        if not model_to_use:
-            model_to_use = str(sar_model) if sar_model.exists() else "yolov8n.pt"
+        model_to_use = args.yolo_model.strip() or _preferred_model()
         if _has_images(yolo_input) and _is_model_usable(model_to_use):
             _run(
                 [
