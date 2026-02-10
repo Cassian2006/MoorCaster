@@ -25,6 +25,7 @@ def _patch_paths(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(api, "RAW_AIS_DIR", raw_ais)
     monkeypatch.setattr(api, "PROCESSED_AIS_DIR", processed_ais)
     monkeypatch.setattr(api, "INTERIM_AIS_DIR", interim_ais)
+    api._cache_store.clear()
 
 
 def test_health_ok_with_credentials_and_model(tmp_path: Path, monkeypatch) -> None:
@@ -108,3 +109,39 @@ def test_forecast_vision_returns_semantic_unit_and_confidence(tmp_path: Path, mo
     assert body["confidence"]["level"] == "low"
     assert "trend signals" in body["business_note"]
     assert len(body["items"]) == 1
+
+
+def test_meta_uses_ttl_cache(tmp_path: Path, monkeypatch) -> None:
+    _patch_paths(tmp_path, monkeypatch)
+    calls = {"n": 0}
+
+    def _fake_meta():
+        calls["n"] += 1
+        return {"server_time": "x", "last_updated_utc": None, "files": {}, "ais_download": {}, "active_yolo_model": "m"}
+
+    monkeypatch.setattr(api, "_build_meta_payload", _fake_meta)
+    monkeypatch.setattr(api, "DEFAULT_META_CACHE_TTL_SEC", 60.0)
+
+    client = TestClient(api.app)
+    r1 = client.get("/api/meta")
+    r2 = client.get("/api/meta")
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert calls["n"] == 1
+
+
+def test_health_uses_ttl_cache(tmp_path: Path, monkeypatch) -> None:
+    _patch_paths(tmp_path, monkeypatch)
+    calls = {"n": 0}
+
+    def _fake_health():
+        calls["n"] += 1
+        return {"ok": True, "status": "ok", "warnings": [], "checks": {}}
+
+    monkeypatch.setattr(api, "_health_checks", _fake_health)
+    monkeypatch.setattr(api, "DEFAULT_HEALTH_CACHE_TTL_SEC", 60.0)
+
+    client = TestClient(api.app)
+    r1 = client.get("/api/health")
+    r2 = client.get("/api/health")
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert calls["n"] == 1

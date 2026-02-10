@@ -5,6 +5,8 @@ import os
 import subprocess
 import sys
 import threading
+import time
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -27,6 +29,12 @@ FRONTEND_DIST_DIR = ROOT / "frontend" / "dist"
 DEFAULT_BBOX = "121.90,30.75,122.25,30.50"
 DEFAULT_START = "2024-04-01 00:00:00"
 DEFAULT_END = "2024-06-30 23:59:59"
+DEFAULT_META_CACHE_TTL_SEC = float(os.getenv("META_CACHE_TTL_SEC", "15"))
+DEFAULT_HEALTH_CACHE_TTL_SEC = float(os.getenv("HEALTH_CACHE_TTL_SEC", "15"))
+DEFAULT_AIS_SCAN_CACHE_TTL_SEC = float(os.getenv("AIS_SCAN_CACHE_TTL_SEC", "10"))
+
+_cache_lock = threading.Lock()
+_cache_store: Dict[str, Dict[str, Any]] = {}
 
 
 def _preferred_yolo_models() -> List[Path]:
@@ -70,6 +78,29 @@ def _read_csv(path: Path) -> pd.DataFrame:
         return pd.read_csv(path)
     except Exception:
         return pd.DataFrame()
+
+
+def _cache_get(key: str, ttl_sec: float) -> Optional[Dict[str, Any]]:
+    now = time.time()
+    with _cache_lock:
+        row = _cache_store.get(key)
+        if not row:
+            return None
+        if now - float(row.get("ts", 0.0)) > ttl_sec:
+            return None
+        return deepcopy(row.get("value"))
+
+
+def _cache_set(key: str, value: Dict[str, Any]) -> None:
+    with _cache_lock:
+        _cache_store[key] = {"ts": time.time(), "value": deepcopy(value)}
+
+
+def _cache_invalidate(prefix: str) -> None:
+    with _cache_lock:
+        dead = [k for k in _cache_store.keys() if k.startswith(prefix)]
+        for k in dead:
+            _cache_store.pop(k, None)
 
 
 def _run_script(args: List[str]) -> None:
@@ -323,20 +354,61 @@ def _start_job(name: str, command: List[str], log_file: Path) -> JobState:
 
 
 def _scan_latest_ais_file() -> Dict[str, Any]:
+    cached = _cache_get("ais_scan", DEFAULT_AIS_SCAN_CACHE_TTL_SEC)
+    if cached is not None:
+        return cached
+
+    log_candidates = [LOG_DIR / "download_ais.stdout.log", LOG_DIR / "download_ais.log"]
+    for log_path in log_candidates:
+        if not log_path.exists():
+            continue
+        lines = _tail(log_path, max_lines=200)
+        for line in reversed(lines):
+            if "[progress] files=" not in line and "[done] rc=" not in line:
+                continue
+            parts = line.split(" files=", 1)
+            if len(parts) != 2:
+                continue
+            right = parts[1]
+            num_part, _, remain = right.partition(" latest=")
+            if not num_part.isdigit():
+                continue
+            count = int(num_part)
+            latest_mtime = None
+            latest = None
+            if remain:
+                # format: "<YYYY-mm-dd HH:MM:SS> <path>"
+                if len(remain) >= 20:
+                    ts_text = remain[:19]
+                    latest = remain[20:].strip() if len(remain) > 20 else None
+                    try:
+                        dt_local = datetime.strptime(ts_text, "%Y-%m-%d %H:%M:%S")
+                        local_tz = datetime.now().astimezone().tzinfo
+                        latest_mtime = dt_local.replace(tzinfo=local_tz).astimezone(timezone.utc).isoformat()
+                    except Exception:
+                        latest_mtime = None
+            payload = {"count": count, "latest": latest, "latest_mtime": latest_mtime}
+            _cache_set("ais_scan", payload)
+            return payload
+
     dirs = [RAW_AIS_DIR / "raw_tracks_csv", RAW_AIS_DIR / "raw_tracks"]
     files: List[Path] = []
     for folder in dirs:
         if folder.exists():
             files.extend([p for p in folder.rglob("*") if p.is_file()])
     if not files:
-        return {"count": 0, "latest": None, "latest_mtime": None}
+        payload = {"count": 0, "latest": None, "latest_mtime": None}
+        _cache_set("ais_scan", payload)
+        return payload
     files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     latest = files[0]
-    return {
+    payload = {
         "count": len(files),
         "latest": str(latest.relative_to(ROOT)),
         "latest_mtime": _mtime_iso(latest),
     }
+    _cache_set("ais_scan", payload)
+    return payload
 
 
 def _csv_has_geo_columns(path: Path) -> bool:
@@ -406,13 +478,15 @@ def favicon() -> Response:
 
 @app.get("/api/health")
 def health() -> Dict[str, Any]:
-    payload = _health_checks()
+    payload = _cache_get("health", DEFAULT_HEALTH_CACHE_TTL_SEC)
+    if payload is None:
+        payload = _health_checks()
+        _cache_set("health", payload)
     payload["time"] = _now_iso()
     return payload
 
 
-@app.get("/api/meta")
-def meta() -> Dict[str, Any]:
+def _build_meta_payload() -> Dict[str, Any]:
     tracked = {
         "congestion_curve": METRICS_DIR / "congestion_curve.csv",
         "waiting_time_by_day": METRICS_DIR / "waiting_time_by_day.csv",
@@ -431,6 +505,16 @@ def meta() -> Dict[str, Any]:
         "ais_download": _scan_latest_ais_file(),
         "active_yolo_model": _resolve_yolo_model(""),
     }
+
+
+@app.get("/api/meta")
+def meta() -> Dict[str, Any]:
+    payload = _cache_get("meta", DEFAULT_META_CACHE_TTL_SEC)
+    if payload is None:
+        payload = _build_meta_payload()
+        _cache_set("meta", payload)
+    payload["server_time"] = _now_iso()
+    return payload
 
 
 @app.get("/api/series/congestion")
@@ -741,6 +825,9 @@ def start_download_ais(req: StartDownloadRequest) -> Dict[str, Any]:
         str(req.slice_threshold),
     ]
     state = _start_job("download_ais", cmd, LOG_DIR / "download_ais.log")
+    _cache_invalidate("ais_scan")
+    _cache_invalidate("meta")
+    _cache_invalidate("health")
     return {"job": state.model_dump(), "progress": _scan_latest_ais_file()}
 
 
@@ -756,6 +843,8 @@ def start_pipeline(req: StartPipelineRequest) -> Dict[str, Any]:
         yolo_model,
     ]
     state = _start_job("pipeline", cmd, LOG_DIR / "pipeline.log")
+    _cache_invalidate("meta")
+    _cache_invalidate("health")
     return {"job": state.model_dump(), "active_yolo_model": yolo_model}
 
 

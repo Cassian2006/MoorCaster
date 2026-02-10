@@ -84,8 +84,15 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     report = {"files": []}
-    for csv_path in sorted(src_dir.glob("*.csv")):
-        dst_path = out_dir / csv_path.name.replace("_aoi.csv", "_clean.csv")
+    for csv_path in sorted(p for p in src_dir.rglob("*.csv") if p.is_file()):
+        rel = csv_path.relative_to(src_dir)
+        dst_rel = rel
+        if dst_rel.name.endswith("_aoi.csv"):
+            dst_rel = dst_rel.with_name(dst_rel.name.replace("_aoi.csv", "_clean.csv"))
+        else:
+            dst_rel = dst_rel.with_name(f"{dst_rel.stem}_clean{dst_rel.suffix}")
+        dst_path = out_dir / dst_rel
+        dst_path.parent.mkdir(parents=True, exist_ok=True)
         if dst_path.exists():
             dst_path.unlink()
         stats = clean_ais_file(csv_path, dst_path)

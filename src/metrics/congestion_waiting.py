@@ -22,7 +22,7 @@ def _normalize_time_bin(freq: str) -> str:
 
 
 def _load_clean_csvs(clean_dir: Path) -> pd.DataFrame:
-    files = sorted(clean_dir.glob("*.csv"))
+    files = sorted(p for p in clean_dir.rglob("*.csv") if p.is_file())
     if not files:
         return pd.DataFrame()
     parts: List[pd.DataFrame] = []
